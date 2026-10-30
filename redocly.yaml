@@ -1,0 +1,6 @@
+extends:
+  - recommended
+rules:
+  # API ini sengaja membalas HTTP 200 untuk semua galat (konvensi SMM panel API v2),
+  # jadi tidak ada respons 4XX untuk didokumentasikan.
+  operation-4xx-response: off

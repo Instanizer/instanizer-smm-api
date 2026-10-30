@@ -1,0 +1,398 @@
+openapi: 3.0.3
+info:
+  title: Instanizer SMM Panel Reseller API
+  version: "2"
+  description: |
+    API reseller Instanizer, kompatibel dengan konvensi "SMM panel API v2".
+    Satu endpoint (`POST /api/v2`) melayani semua aksi lewat parameter `action`.
+
+    **Konvensi penting**
+    - Body boleh `application/x-www-form-urlencoded` atau `application/json`.
+      Parameter di query string diabaikan agar API key tidak masuk log akses.
+    - Setiap galat dibalas **HTTP 200** dengan body `{ "error": "..." }`.
+      Selalu periksa field `error`, bukan hanya kode status HTTP.
+    - Harga (`rate`) dalam Rupiah per 1.000 unit, persis seperti yang ditagihkan.
+    - Batas laju: 300 permintaan/menit per kunci, 60 pesanan/menit per kunci,
+      30 kegagalan autentikasi per 15 menit per IP.
+    - Untuk `add`, kirim `idempotency_key` agar pengulangan setelah koneksi terputus
+      tidak membuat pesanan ganda.
+
+    Dokumentasi lengkap: https://instanizer.com/api-docs
+  contact:
+    name: Instanizer
+    url: https://instanizer.com
+    email: support@instanizer.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+externalDocs:
+  description: Dokumentasi API Instanizer
+  url: https://instanizer.com/api-docs
+servers:
+  - url: https://api.instanizer.com
+    description: Produksi
+tags:
+  - name: reseller
+    description: Aksi reseller (semua lewat satu endpoint).
+paths:
+  /api/v2:
+    post:
+      tags: [reseller]
+      operationId: resellerApi
+      # Autentikasi lewat parameter body `key`, bukan header HTTP.
+      security: []
+      summary: Jalankan aksi API reseller
+      description: |
+        Pilih aksi lewat field `action`: `services`, `add`, `status`, `refill`,
+        `refill_status`, `cancel`, atau `balance`. Bentuk respons bergantung pada aksi
+        (lihat contoh). Galat selalu `{ "error": "..." }` dengan HTTP 200.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/Request"
+            examples:
+              balance:
+                summary: Saldo
+                value: { key: YOUR_API_KEY, action: balance }
+              add:
+                summary: Buat pesanan
+                value:
+                  key: YOUR_API_KEY
+                  action: add
+                  service: 1
+                  link: https://instagram.com/username
+                  quantity: 1000
+                  idempotency_key: pesanan-0001
+              statusMany:
+                summary: Status beberapa pesanan
+                value: { key: YOUR_API_KEY, action: status, orders: "23501,23502" }
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Request"
+      responses:
+        "200":
+          description: |
+            Hasil aksi, atau `{ "error": "..." }` bila gagal (galat juga berstatus 200).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Response"
+              examples:
+                services:
+                  summary: action=services
+                  value:
+                    - service: 1
+                      name: Instagram Followers | Real | Refill 30 Hari
+                      type: Default
+                      category: Instagram Followers
+                      rate: "12375"
+                      min: "10"
+                      max: "100000"
+                      refill: true
+                      cancel: false
+                add:
+                  summary: action=add
+                  value: { order: 23501 }
+                status:
+                  summary: action=status (satu pesanan)
+                  value:
+                    charge: "12375.00"
+                    start_count: "3572"
+                    status: In progress
+                    remains: "157"
+                    currency: IDR
+                statusMany:
+                  summary: action=status dengan orders
+                  value:
+                    "23501":
+                      charge: "12375.00"
+                      start_count: "3572"
+                      status: Partial
+                      remains: "157"
+                      currency: IDR
+                    "99": { error: Incorrect order ID }
+                refill:
+                  summary: action=refill (satu pesanan)
+                  value: { refill: 23501 }
+                refillMany:
+                  summary: action=refill dengan orders
+                  value:
+                    - { order: 23501, refill: 23501 }
+                    - { order: 23502, refill: { error: Layanan ini tidak mendukung refill } }
+                refillStatus:
+                  summary: action=refill_status
+                  value: { status: Completed }
+                cancel:
+                  summary: action=cancel
+                  value:
+                    - { order: 23501, cancel: 1 }
+                    - { order: 99, cancel: { error: Incorrect order ID } }
+                balance:
+                  summary: action=balance
+                  value: { balance: "250000.00", currency: IDR }
+                error:
+                  summary: Galat (tetap HTTP 200)
+                  value: { error: Invalid API key }
+components:
+  schemas:
+    Request:
+      description: Satu dari tujuh bentuk permintaan, dibedakan oleh `action`.
+      oneOf:
+        - $ref: "#/components/schemas/ServicesRequest"
+        - $ref: "#/components/schemas/AddRequest"
+        - $ref: "#/components/schemas/StatusRequest"
+        - $ref: "#/components/schemas/RefillRequest"
+        - $ref: "#/components/schemas/RefillStatusRequest"
+        - $ref: "#/components/schemas/CancelRequest"
+        - $ref: "#/components/schemas/BalanceRequest"
+      discriminator:
+        propertyName: action
+        mapping:
+          services: "#/components/schemas/ServicesRequest"
+          add: "#/components/schemas/AddRequest"
+          status: "#/components/schemas/StatusRequest"
+          refill: "#/components/schemas/RefillRequest"
+          refill_status: "#/components/schemas/RefillStatusRequest"
+          cancel: "#/components/schemas/CancelRequest"
+          balance: "#/components/schemas/BalanceRequest"
+
+    ServicesRequest:
+      type: object
+      required: [key, action]
+      properties:
+        key: { $ref: "#/components/schemas/ApiKey" }
+        action: { type: string, enum: [services] }
+    BalanceRequest:
+      type: object
+      required: [key, action]
+      properties:
+        key: { $ref: "#/components/schemas/ApiKey" }
+        action: { type: string, enum: [balance] }
+    AddRequest:
+      type: object
+      required: [key, action, service]
+      description: |
+        Parameter wajib bergantung pada `type` layanan. Untuk `Default` cukup
+        `service`, `link`, dan `quantity`.
+      properties:
+        key: { $ref: "#/components/schemas/ApiKey" }
+        action: { type: string, enum: [add] }
+        service:
+          type: integer
+          minimum: 1
+          description: ID layanan dari aksi `services`.
+        link:
+          type: string
+          description: Link target (profil, postingan, video).
+        quantity:
+          type: integer
+          minimum: 1
+          description: Jumlah unit, di antara `min` dan `max` layanan.
+        runs:
+          type: integer
+          description: Drip-feed, jumlah pengulangan. Total tagihan = quantity x runs.
+        interval:
+          type: integer
+          description: Drip-feed, jeda antar-pengulangan dalam menit.
+        comments:
+          type: string
+          description: Custom Comments / Comment Replies, satu komentar per baris.
+        usernames:
+          type: string
+          description: Mentions Custom List / with Hashtags, satu username per baris.
+        username:
+          type: string
+          description: Mentions User Followers, Comment Likes, Comment Replies, Subscriptions.
+        hashtag: { type: string, description: Mentions Hashtag. }
+        hashtags: { type: string, description: Mentions with Hashtags. }
+        keywords: { type: string, description: "SEO: kata kunci." }
+        media: { type: string, description: "Mentions Media Likers: link media." }
+        answer_number: { type: string, description: "Poll: nomor jawaban." }
+        groups: { type: string, description: "Invites from Groups: daftar grup." }
+        country: { type: string, description: Web Traffic. }
+        device: { type: string, description: Web Traffic. }
+        type_of_traffic: { type: string, description: Web Traffic. }
+        google_keyword: { type: string, description: Web Traffic. }
+        min: { type: integer, description: Subscriptions. }
+        max: { type: integer, description: Subscriptions. }
+        posts: { type: integer, description: Subscriptions. }
+        old_posts: { type: integer, description: Subscriptions. }
+        delay: { type: integer, description: Subscriptions. }
+        expiry: { type: string, description: Subscriptions. }
+        idempotency_key:
+          type: string
+          pattern: "^[A-Za-z0-9._:-]{1,64}$"
+          description: |
+            Opsional. Permintaan ulang dengan kunci yang sama tidak membuat pesanan
+            kedua dan mengembalikan ID pesanan pertama.
+    StatusRequest:
+      type: object
+      required: [key, action]
+      description: Kirim salah satu dari `order` atau `orders`.
+      properties:
+        key: { $ref: "#/components/schemas/ApiKey" }
+        action: { type: string, enum: [status] }
+        order: { type: integer, minimum: 1, description: ID pesanan. }
+        orders:
+          type: string
+          description: Beberapa ID dipisah koma, maksimal 100.
+          example: "23501,23502"
+    RefillRequest:
+      type: object
+      required: [key, action]
+      description: Kirim salah satu dari `order` atau `orders`.
+      properties:
+        key: { $ref: "#/components/schemas/ApiKey" }
+        action: { type: string, enum: [refill] }
+        order: { type: integer, minimum: 1 }
+        orders:
+          type: string
+          description: Beberapa ID dipisah koma, maksimal 100.
+    RefillStatusRequest:
+      type: object
+      required: [key, action]
+      description: Kirim salah satu dari `refill` atau `refills`.
+      properties:
+        key: { $ref: "#/components/schemas/ApiKey" }
+        action: { type: string, enum: [refill_status] }
+        refill: { type: integer, minimum: 1, description: ID refill (sama dengan ID pesanan). }
+        refills:
+          type: string
+          description: Beberapa ID dipisah koma, maksimal 100.
+    CancelRequest:
+      type: object
+      required: [key, action]
+      description: Kirim `orders` (atau satu ID lewat `order`).
+      properties:
+        key: { $ref: "#/components/schemas/ApiKey" }
+        action: { type: string, enum: [cancel] }
+        order: { type: integer, minimum: 1 }
+        orders:
+          type: string
+          description: ID dipisah koma, maksimal 100.
+
+    ApiKey:
+      type: string
+      description: API key Anda (dari halaman Akses API). Jangan taruh di query string.
+
+    Response:
+      description: Bentuk respons bergantung pada `action`; galat selalu `Error`.
+      anyOf:
+        - $ref: "#/components/schemas/Error"
+        - $ref: "#/components/schemas/ServiceList"
+        - $ref: "#/components/schemas/AddResponse"
+        - $ref: "#/components/schemas/OrderStatus"
+        - $ref: "#/components/schemas/MultiStatus"
+        - $ref: "#/components/schemas/RefillResponse"
+        - $ref: "#/components/schemas/MultiRefill"
+        - $ref: "#/components/schemas/RefillStatus"
+        - $ref: "#/components/schemas/MultiRefillStatus"
+        - $ref: "#/components/schemas/CancelResults"
+        - $ref: "#/components/schemas/Balance"
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: |
+            Pesan galat, mis. `Invalid API key`, `Incorrect request`, `Incorrect service ID`,
+            `Incorrect order ID`, `Incorrect refill ID`, `Not enough funds on balance`,
+            `Maximum 100 IDs per request`, `Too many requests, please slow down`.
+    Service:
+      type: object
+      required: [service, name, type, category, rate, min, max, refill, cancel]
+      properties:
+        service: { type: integer, description: ID layanan yang stabil; pakai pada `add`. }
+        name: { type: string }
+        type: { type: string, example: Default }
+        category: { type: string }
+        rate: { type: string, description: Harga per 1.000 unit dalam Rupiah., example: "12375" }
+        min: { type: string, example: "10" }
+        max: { type: string, example: "100000" }
+        refill: { type: boolean }
+        cancel: { type: boolean }
+    ServiceList:
+      type: array
+      items: { $ref: "#/components/schemas/Service" }
+    AddResponse:
+      type: object
+      required: [order]
+      properties:
+        order: { type: integer, description: ID pesanan. }
+    OrderStatus:
+      type: object
+      required: [charge, start_count, status, remains, currency]
+      properties:
+        charge:
+          type: string
+          description: |
+            Tagihan setelah refund: Canceled = 0, Partial = harga dikurangi refund
+            unit yang tidak terkirim.
+          example: "12375.00"
+        start_count: { type: string, example: "3572" }
+        status:
+          type: string
+          enum: [Pending, Processing, In progress, Completed, Partial, Canceled]
+        remains: { type: string, example: "157" }
+        currency: { type: string, enum: [IDR] }
+    MultiStatus:
+      type: object
+      description: Kunci = ID pesanan sebagaimana dikirim; nilai = status atau galat per ID.
+      additionalProperties:
+        oneOf:
+          - $ref: "#/components/schemas/OrderStatus"
+          - $ref: "#/components/schemas/Error"
+    RefillResponse:
+      type: object
+      required: [refill]
+      properties:
+        refill: { type: integer, description: ID refill (sama dengan ID pesanan). }
+    MultiRefill:
+      type: array
+      items:
+        type: object
+        required: [order, refill]
+        properties:
+          order: { oneOf: [{ type: integer }, { type: string }] }
+          refill:
+            oneOf:
+              - { type: integer }
+              - { $ref: "#/components/schemas/Error" }
+    RefillStatus:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, example: Completed }
+    MultiRefillStatus:
+      type: array
+      items:
+        type: object
+        required: [refill, status]
+        properties:
+          refill: { oneOf: [{ type: integer }, { type: string }] }
+          status:
+            oneOf:
+              - { type: string }
+              - { $ref: "#/components/schemas/Error" }
+    CancelResults:
+      type: array
+      items:
+        type: object
+        required: [order, cancel]
+        properties:
+          order: { oneOf: [{ type: integer }, { type: string }] }
+          cancel:
+            description: "`1` bila pembatalan diterima, atau objek galat."
+            oneOf:
+              - { type: integer, enum: [1] }
+              - { $ref: "#/components/schemas/Error" }
+    Balance:
+      type: object
+      required: [balance, currency]
+      properties:
+        balance: { type: string, example: "250000.00" }
+        currency: { type: string, enum: [IDR] }

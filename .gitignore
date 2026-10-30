@@ -1,0 +1,15 @@
+# Rahasia: jangan pernah commit API key
+.env
+.env.*
+!.env.example
+
+# Artefak build
+examples/rust/target/
+examples/csharp/bin/
+examples/csharp/obj/
+examples/go/*.exe
+*.jar
+*.class
+node_modules/
+__pycache__/
+.DS_Store
