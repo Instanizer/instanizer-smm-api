@@ -1,10 +1,10 @@
-//! Klien kecil API reseller Instanizer. Rust 1.70+, dependensi: ureq dan serde_json.
+//! Minimal Instanizer reseller API client. Rust 1.70+, dependencies: ureq and serde_json.
 //!
-//!   export INSTANIZER_API_KEY=API_KEY_ANDA
+//!   export INSTANIZER_API_KEY=YOUR_API_KEY
 //!   cargo run
 //!
-//! Contoh ini hanya membaca (saldo, layanan, dan status bila INSTANIZER_ORDER_ID diisi).
-//! Untuk membuat pesanan, panggil client.add(...) seperti contoh di bagian bawah berkas.
+//! This example is read-only (balance, services, and order status when INSTANIZER_ORDER_ID is set).
+//! To place an order, call client.add(...) as shown at the bottom of this file.
 
 use serde_json::Value;
 use std::env;
@@ -26,14 +26,14 @@ impl Client {
         Client { key, url, agent }
     }
 
-    /// Kirim aksi ke API. API membalas HTTP 200 untuk galat: field "error" diubah menjadi Err.
+    /// Send an action to the API. The API replies HTTP 200 for errors: the "error" field is turned into an Err.
     fn call(&self, params: &[(&str, &str)]) -> Result<Value, Box<dyn Error>> {
         let mut form: Vec<(&str, &str)> = params.to_vec();
-        form.push(("key", &self.key)); // key hanya di body, bukan di query string
+        form.push(("key", &self.key)); // key goes in the body only, never in the query string
         let body: Value = self.agent.post(&self.url).send_form(&form)?.into_json()?;
 
         if let Some(message) = body.get("error").and_then(Value::as_str) {
-            return Err(format!("Galat API: {message}").into());
+            return Err(format!("API error: {message}").into());
         }
         Ok(body)
     }
@@ -46,7 +46,7 @@ impl Client {
         self.call(&[("action", "balance")])
     }
 
-    /// Buat pesanan. Kirim idempotency_key agar pengulangan tidak menagih dua kali.
+    /// Place an order. Pass idempotency_key so a retry is not billed twice.
     #[allow(dead_code)]
     fn add(
         &self,
@@ -73,7 +73,7 @@ impl Client {
         self.call(&[("action", "status"), ("order", order)])
     }
 
-    /// orders: ID dipisah koma, maksimal 100, mis. "23501,23502".
+    /// orders: comma-separated IDs, at most 100, e.g. "23501,23502".
     #[allow(dead_code)]
     fn multi_status(&self, orders: &str) -> Result<Value, Box<dyn Error>> {
         self.call(&[("action", "status"), ("orders", orders)])
@@ -96,13 +96,13 @@ impl Client {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let key = env::var("INSTANIZER_API_KEY").map_err(|_| "Isi INSTANIZER_API_KEY terlebih dahulu.")?;
+    let key = env::var("INSTANIZER_API_KEY").map_err(|_| "Set INSTANIZER_API_KEY first.")?;
     let client = Client::new(key);
 
-    println!("Saldo: {}", client.balance()?);
+    println!("Balance: {}", client.balance()?);
     let services = client.services()?;
-    let list = services.as_array().ok_or("Respons layanan bukan array")?;
-    println!("{} layanan. Tiga pertama:", list.len());
+    let list = services.as_array().ok_or("Services response is not an array")?;
+    println!("{} services. First three:", list.len());
     for s in list.iter().take(3) {
         println!(
             "  #{} {} - Rp {}/1000 (min {}, max {})",
@@ -113,19 +113,19 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     if let Ok(order_id) = env::var("INSTANIZER_ORDER_ID") {
         if !order_id.is_empty() {
-            println!("Status pesanan: {}", client.status(&order_id)?);
+            println!("Order status: {}", client.status(&order_id)?);
         }
     }
 
-    // Membuat pesanan (memotong saldo). Contoh:
-    // let result = client.add(1, "https://instagram.com/username", 1000, Some("pesanan-0001"))?;
+    // Place an order (deducts balance). Example:
+    // let result = client.add(1, "https://instagram.com/username", 1000, Some("order-0001"))?;
     // println!("Order ID: {}", result["order"]);
     Ok(())
 }
 
 fn main() {
     if let Err(e) = run() {
-        eprintln!("Gagal: {e}");
+        eprintln!("Failed: {e}");
         std::process::exit(1);
     }
 }

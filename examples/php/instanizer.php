@@ -1,12 +1,12 @@
 <?php
 /**
- * Klien kecil API reseller Instanizer. PHP 7.4+ dengan ekstensi curl dan json.
+ * Minimal Instanizer reseller API client. PHP 7.4+ with the curl and json extensions.
  *
- *   export INSTANIZER_API_KEY=API_KEY_ANDA
+ *   export INSTANIZER_API_KEY=YOUR_API_KEY
  *   php instanizer.php
  *
- * Contoh ini hanya membaca (saldo, layanan, dan status bila INSTANIZER_ORDER_ID diisi).
- * Untuk membuat pesanan, panggil $api->add(...) seperti contoh di bagian bawah berkas.
+ * This example is read-only (balance, services, and order status when INSTANIZER_ORDER_ID is set).
+ * To place an order, call $api->add(...) as shown at the bottom of this file.
  */
 
 class InstanizerException extends RuntimeException
@@ -27,7 +27,7 @@ class Instanizer
     private function call(array $params)
     {
         $params = array_filter($params, fn ($v) => $v !== null);
-        $params['key'] = $this->key; // key hanya di body, bukan di query string
+        $params['key'] = $this->key; // key goes in the body only, never in the query string
 
         $ch = curl_init($this->url);
         curl_setopt_array($ch, [
@@ -40,15 +40,15 @@ class Instanizer
         if ($raw === false) {
             $message = curl_error($ch);
             curl_close($ch);
-            throw new InstanizerException("Koneksi gagal: $message");
+            throw new InstanizerException("Connection failed: $message");
         }
         curl_close($ch);
 
         $data = json_decode($raw, true);
         if ($data === null) {
-            throw new InstanizerException('Respons bukan JSON yang valid.');
+            throw new InstanizerException('Response is not valid JSON.');
         }
-        // API membalas HTTP 200 untuk galat: periksa field "error".
+        // The API replies HTTP 200 for errors: check the "error" field.
         if (is_array($data) && isset($data['error']) && is_string($data['error'])) {
             throw new InstanizerException($data['error']);
         }
@@ -65,7 +65,7 @@ class Instanizer
         return $this->call(['action' => 'balance']);
     }
 
-    /** Buat pesanan. Kirim idempotency_key agar pengulangan tidak menagih dua kali. */
+    /** Place an order. Pass idempotency_key so a retry is not billed twice. */
     public function add(array $data): array
     {
         return $this->call(array_merge(['action' => 'add'], $data));
@@ -97,38 +97,38 @@ class Instanizer
     }
 }
 
-// Jalankan hanya bila berkas ini dieksekusi langsung (bukan saat di-include).
+// Run only when this file is executed directly (not when included).
 if (PHP_SAPI === 'cli' && realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     $key = getenv('INSTANIZER_API_KEY');
     if (!$key) {
-        fwrite(STDERR, "Isi INSTANIZER_API_KEY terlebih dahulu.\n");
+        fwrite(STDERR, "Set INSTANIZER_API_KEY first.\n");
         exit(1);
     }
     $api = new Instanizer($key);
 
     try {
-        echo 'Saldo: ' . json_encode($api->balance()) . "\n";
+        echo 'Balance: ' . json_encode($api->balance()) . "\n";
         $services = $api->services();
-        echo count($services) . " layanan. Tiga pertama:\n";
+        echo count($services) . " services. First three:\n";
         foreach (array_slice($services, 0, 3) as $s) {
             echo "  #{$s['service']} {$s['name']} - Rp {$s['rate']}/1000 (min {$s['min']}, max {$s['max']})\n";
         }
 
         $orderId = getenv('INSTANIZER_ORDER_ID');
         if ($orderId) {
-            echo 'Status pesanan: ' . json_encode($api->status($orderId)) . "\n";
+            echo 'Order status: ' . json_encode($api->status($orderId)) . "\n";
         }
 
-        // Membuat pesanan (memotong saldo). Contoh:
+        // Place an order (deducts balance). Example:
         // $result = $api->add([
         //     'service' => 1,
         //     'link' => 'https://instagram.com/username',
         //     'quantity' => 1000,
-        //     'idempotency_key' => 'pesanan-0001',
+        //     'idempotency_key' => 'order-0001',
         // ]);
         // echo 'Order ID: ' . $result['order'] . "\n";
     } catch (InstanizerException $e) {
-        fwrite(STDERR, 'Gagal: ' . $e->getMessage() . "\n");
+        fwrite(STDERR, 'Failed: ' . $e->getMessage() . "\n");
         exit(1);
     }
 }

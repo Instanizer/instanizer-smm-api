@@ -1,115 +1,118 @@
+English | [Bahasa Indonesia](README.id.md)
+
 # Instanizer SMM API
 
-Spesifikasi OpenAPI dan contoh kode 10+ bahasa untuk **API reseller Instanizer**, SMM panel
-Indonesia. API ini mengikuti konvensi "SMM panel API v2" sehingga skrip reseller yang sudah
-ada biasanya cukup mengganti URL dan API key.
+SMM panel API for resellers: an OpenAPI spec and code examples in 11 languages (cURL, Python,
+Node.js, TypeScript, PHP, Java, C#, Go, Ruby, Rust, Kotlin) for the **Instanizer reseller API**,
+an Indonesian SMM panel. The API follows the "SMM panel API v2" convention, so existing reseller
+scripts usually only need a new URL and API key.
 
-> OpenAPI spec and code examples in 10+ languages for the [Instanizer](https://instanizer.com)
+> OpenAPI spec and code examples in 11 languages for the [Instanizer](https://instanizer.com)
 > SMM panel reseller API (v2-compatible): services, add order, status, refill, cancel, balance.
 
-- Dokumentasi lengkap: https://instanizer.com/api-docs
-- Spesifikasi: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3)
+- Full documentation: https://instanizer.com/en/api-docs
+- Specification: [`openapi.yaml`](openapi.yaml) (OpenAPI 3.0.3)
 - Endpoint: `POST https://api.instanizer.com/api/v2`
-- Harga dan katalog: https://instanizer.com/layanan · data harga terbuka: https://instanizer.com/indeks-harga-smm
+- Prices and catalog: https://instanizer.com/en/layanan · open pricing data: https://instanizer.com/en/indeks-harga-smm
 
-## Mulai cepat
+## Quick start
 
-1. Daftar dan verifikasi email di [instanizer.com](https://instanizer.com), lalu buat API key di
-   halaman [Akses API](https://instanizer.com/api-docs).
-2. Isi saldo, lalu panggil API:
+1. Sign up and verify your email at [instanizer.com](https://instanizer.com), then create an API key
+   on the [API Access](https://instanizer.com/en/api-docs) page.
+2. Top up your balance, then call the API:
 
 ```bash
 curl -X POST https://api.instanizer.com/api/v2 \
-  -d key=API_KEY_ANDA \
+  -d key=YOUR_API_KEY \
   -d action=balance
 # {"balance":"250000.00","currency":"IDR"}
 ```
 
-## Aksi yang tersedia
+## Available actions
 
-Semua aksi dikirim ke satu endpoint lewat parameter `action`.
+All actions are sent to a single endpoint through the `action` parameter.
 
-| `action` | Fungsi | Parameter utama |
+| `action` | Purpose | Main parameters |
 |---|---|---|
-| `services` | Daftar layanan dan harga per 1.000 (Rupiah) | |
-| `add` | Buat pesanan | `service`, `link`, `quantity`, `idempotency_key` (opsional) |
-| `status` | Status satu atau banyak pesanan | `order` atau `orders` (maks. 100, dipisah koma) |
-| `refill` | Minta refill | `order` atau `orders` |
-| `refill_status` | Status refill | `refill` atau `refills` |
-| `cancel` | Batalkan pesanan | `orders` (maks. 100) |
-| `balance` | Saldo akun | |
+| `services` | List services and prices per 1,000 (Rupiah) | |
+| `add` | Place an order | `service`, `link`, `quantity`, `idempotency_key` (optional) |
+| `status` | Status of one or many orders | `order` or `orders` (max. 100, comma-separated) |
+| `refill` | Request a refill | `order` or `orders` |
+| `refill_status` | Refill status | `refill` or `refills` |
+| `cancel` | Cancel orders | `orders` (max. 100) |
+| `balance` | Account balance | |
 
-## Aturan penting
+## Important rules
 
-- **Galat dibalas HTTP 200** dengan body `{"error": "..."}`. Selalu periksa field `error`, jangan
-  hanya kode status HTTP.
-- **Kirim `key` di body**, bukan di query string. Parameter di query string diabaikan agar key
-  tidak masuk log akses.
-- **Gunakan `idempotency_key` pada `add`.** Jika koneksi terputus sebelum Anda menerima respons,
-  kirim ulang dengan kunci yang sama dan pesanan tidak dibuat dua kali.
-- **Batas laju:** 300 permintaan/menit per key, 60 pesanan/menit per key, 30 kegagalan
-  autentikasi per 15 menit per IP.
-- **Status diperbarui sekitar 10 menit sekali.** Tidak perlu memeriksa lebih sering.
-- Ambil ulang `services` secara berkala (misalnya sekali sehari): layanan bisa ditambah atau
-  dihapus dari katalog.
-- Jangan menaruh API key di repo, kode klien sisi browser, atau tangkapan layar.
+- **Errors are returned with HTTP 200** and a body of `{"error": "..."}`. Always check the `error`
+  field, not just the HTTP status code.
+- **Send `key` in the request body**, not in the query string. Query string parameters are ignored
+  so the key never ends up in access logs.
+- **Use `idempotency_key` on `add`.** If the connection drops before you receive the response,
+  resend with the same key and the order is not created twice.
+- **Rate limits:** 300 requests/minute per key, 60 orders/minute per key, 30 authentication
+  failures per 15 minutes per IP.
+- **Statuses are refreshed roughly every 10 minutes.** There is no need to poll more often.
+- Re-fetch `services` periodically (for example once a day): services can be added to or removed
+  from the catalog.
+- Never put your API key in a repo, browser-side client code, or screenshots.
 
-## Contoh kode
+## Code examples
 
-Setiap contoh adalah satu klien kecil dengan metode untuk semua aksi. Demo-nya **hanya membaca**
-(saldo, daftar layanan, dan status bila `INSTANIZER_ORDER_ID` diisi); membuat pesanan ada sebagai
-komentar karena memotong saldo.
+Each example is a small client with a method for every action. The demo is **read-only**
+(balance, service list, and order status when `INSTANIZER_ORDER_ID` is set); placing an order is
+included as a comment because it deducts balance.
 
 ```bash
-export INSTANIZER_API_KEY=API_KEY_ANDA
+export INSTANIZER_API_KEY=YOUR_API_KEY
 ```
 
-| Bahasa | Berkas | Jalankan | Dependensi |
+| Language | File | Run | Dependencies |
 |---|---|---|---|
 | cURL | [`examples/curl/examples.sh`](examples/curl/examples.sh) | `bash examples.sh` | curl |
-| Python 3.8+ | [`examples/python/instanizer.py`](examples/python/instanizer.py) | `python instanizer.py` | tidak ada |
-| Node.js 18+ | [`examples/nodejs/instanizer.mjs`](examples/nodejs/instanizer.mjs) | `node instanizer.mjs` | tidak ada |
-| TypeScript | [`examples/typescript/instanizer.ts`](examples/typescript/instanizer.ts) | `npx tsx instanizer.ts` | tidak ada (tsx via npx) |
-| PHP 7.4+ | [`examples/php/instanizer.php`](examples/php/instanizer.php) | `php instanizer.php` | ekstensi curl, json |
-| Java 17+ | [`examples/java/Instanizer.java`](examples/java/Instanizer.java) | `java Instanizer.java` | tidak ada |
-| C# (.NET 8) | [`examples/csharp/`](examples/csharp) | `dotnet run` | tidak ada |
-| Go 1.20+ | [`examples/go/main.go`](examples/go/main.go) | `go run .` | tidak ada |
-| Ruby 3.0+ | [`examples/ruby/instanizer.rb`](examples/ruby/instanizer.rb) | `ruby instanizer.rb` | tidak ada |
+| Python 3.8+ | [`examples/python/instanizer.py`](examples/python/instanizer.py) | `python instanizer.py` | none |
+| Node.js 18+ | [`examples/nodejs/instanizer.mjs`](examples/nodejs/instanizer.mjs) | `node instanizer.mjs` | none |
+| TypeScript | [`examples/typescript/instanizer.ts`](examples/typescript/instanizer.ts) | `npx tsx instanizer.ts` | none (tsx via npx) |
+| PHP 7.4+ | [`examples/php/instanizer.php`](examples/php/instanizer.php) | `php instanizer.php` | curl, json extensions |
+| Java 17+ | [`examples/java/Instanizer.java`](examples/java/Instanizer.java) | `java Instanizer.java` | none |
+| C# (.NET 8) | [`examples/csharp/`](examples/csharp) | `dotnet run` | none |
+| Go 1.20+ | [`examples/go/main.go`](examples/go/main.go) | `go run .` | none |
+| Ruby 3.0+ | [`examples/ruby/instanizer.rb`](examples/ruby/instanizer.rb) | `ruby instanizer.rb` | none |
 | Rust | [`examples/rust/`](examples/rust) | `cargo run` | `ureq`, `serde_json` |
-| Kotlin (JVM) | [`examples/kotlin/Instanizer.kt`](examples/kotlin/Instanizer.kt) | `kotlinc Instanizer.kt -include-runtime -d instanizer.jar && java -jar instanizer.jar` | tidak ada |
+| Kotlin (JVM) | [`examples/kotlin/Instanizer.kt`](examples/kotlin/Instanizer.kt) | `kotlinc Instanizer.kt -include-runtime -d instanizer.jar && java -jar instanizer.jar` | none |
 
-Status pengujian contoh: cURL, Python, Node.js, TypeScript, dan Rust sudah dijalankan terhadap
-server tiruan yang meniru kontrak API. Contoh PHP, Java, C#, Go, Ruby, dan Kotlin ditulis dan
-ditinjau, tetapi belum dikompilasi atau dijalankan secara otomatis. Jika Anda menemukan masalah,
-buka *issue*.
+Test status: the cURL, Python, Node.js, TypeScript, and Rust examples have been run against a
+mock server that imitates the API contract. The PHP, Java, C#, Go, Ruby, and Kotlin examples are
+written and reviewed, but have not been compiled or run automatically. If you find a problem,
+please open an issue.
 
-Untuk mencoba tanpa API key sungguhan, arahkan klien ke server lain dengan
-`INSTANIZER_API_URL`, misalnya server tiruan buatan sendiri.
+To try a client without a real API key, point it at another server with `INSTANIZER_API_URL`,
+for example a mock server of your own.
 
-## Contoh: membuat pesanan
+## Example: placing an order
 
 ```python
 from instanizer import Instanizer
 
-api = Instanizer("API_KEY_ANDA")
+api = Instanizer("YOUR_API_KEY")
 result = api.add(
     service=1,
     link="https://instagram.com/username",
     quantity=1000,
-    idempotency_key="pesanan-0001",   # aman diulang bila koneksi putus
+    idempotency_key="order-0001",   # safe to retry if the connection drops
 )
 print("Order ID:", result["order"])
 print(api.status(result["order"]))
 ```
 
-## Menggunakan spesifikasi OpenAPI
+## Using the OpenAPI spec
 
-[`openapi.yaml`](openapi.yaml) bisa dimuat ke Swagger UI, Postman, atau generator klien seperti
-OpenAPI Generator. Karena semua aksi memakai satu endpoint, generator akan menghasilkan satu
-operasi dengan berbagai bentuk permintaan (dibedakan oleh `action`); contoh klien di atas
-lebih ringkas untuk pemakaian sehari-hari.
+[`openapi.yaml`](openapi.yaml) can be loaded into Swagger UI, Postman, or client generators such as
+OpenAPI Generator. Because every action uses a single endpoint, a generator will produce one
+operation with several request shapes (distinguished by `action`); the example clients above are
+more concise for everyday use.
 
-## Lisensi
+## License
 
-MIT. Lihat [LICENSE](LICENSE). Layanan Instanizer tunduk pada
-[syarat dan ketentuan](https://instanizer.com/terms) situs.
+MIT. See [LICENSE](LICENSE). Use of the Instanizer service is subject to the site's
+[terms and conditions](https://instanizer.com/terms).

@@ -1,17 +1,17 @@
-// Klien kecil API reseller Instanizer. .NET 8+, tanpa paket tambahan.
+// Minimal Instanizer reseller API client. .NET 8+, no extra packages.
 //
-//   export INSTANIZER_API_KEY=API_KEY_ANDA
+//   export INSTANIZER_API_KEY=YOUR_API_KEY
 //   dotnet run
 //
-// Contoh ini hanya membaca (saldo, layanan, dan status bila INSTANIZER_ORDER_ID diisi).
-// Untuk membuat pesanan, panggil api.AddAsync(...) seperti contoh di bagian bawah berkas.
+// This example is read-only (balance, services, and order status when INSTANIZER_ORDER_ID is set).
+// To place an order, call api.AddAsync(...) as shown at the bottom of this file.
 
 using System.Text.Json;
 
 var key = Environment.GetEnvironmentVariable("INSTANIZER_API_KEY");
 if (string.IsNullOrWhiteSpace(key))
 {
-    Console.Error.WriteLine("Isi INSTANIZER_API_KEY terlebih dahulu.");
+    Console.Error.WriteLine("Set INSTANIZER_API_KEY first.");
     return 1;
 }
 
@@ -19,10 +19,10 @@ using var api = new InstanizerClient(key);
 
 try
 {
-    Console.WriteLine($"Saldo: {await api.BalanceAsync()}");
+    Console.WriteLine($"Balance: {await api.BalanceAsync()}");
 
     var services = await api.ServicesAsync();
-    Console.WriteLine($"{services.GetArrayLength()} layanan. Tiga pertama:");
+    Console.WriteLine($"{services.GetArrayLength()} services. First three:");
     foreach (var s in services.EnumerateArray().Take(3))
     {
         Console.WriteLine(
@@ -34,16 +34,16 @@ try
     var orderId = Environment.GetEnvironmentVariable("INSTANIZER_ORDER_ID");
     if (!string.IsNullOrWhiteSpace(orderId))
     {
-        Console.WriteLine($"Status pesanan: {await api.StatusAsync(orderId)}");
+        Console.WriteLine($"Order status: {await api.StatusAsync(orderId)}");
     }
 
-    // Membuat pesanan (memotong saldo). Contoh:
-    // var result = await api.AddAsync(1, "https://instagram.com/username", 1000, "pesanan-0001");
+    // Place an order (deducts balance). Example:
+    // var result = await api.AddAsync(1, "https://instagram.com/username", 1000, "order-0001");
     // Console.WriteLine($"Order ID: {result.GetProperty("order").GetInt32()}");
 }
 catch (InstanizerException e)
 {
-    Console.Error.WriteLine($"Gagal: {e.Message}");
+    Console.Error.WriteLine($"Failed: {e.Message}");
     return 1;
 }
 
@@ -67,18 +67,18 @@ public sealed class InstanizerClient : IDisposable
 
     private async Task<JsonElement> CallAsync(Dictionary<string, string> parameters)
     {
-        // key hanya di body, bukan di query string
+        // key goes in the body only, never in the query string
         var form = new Dictionary<string, string>(parameters) { ["key"] = _key };
         using var response = await _http.PostAsync(_url, new FormUrlEncodedContent(form));
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement.Clone();
 
-        // API membalas HTTP 200 untuk galat: periksa field "error".
+        // The API replies HTTP 200 for errors: check the "error" field.
         if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("error", out var error)
             && error.ValueKind == JsonValueKind.String)
         {
-            throw new InstanizerException(error.GetString() ?? "Galat tidak diketahui");
+            throw new InstanizerException(error.GetString() ?? "Unknown error");
         }
         return root;
     }
@@ -87,7 +87,7 @@ public sealed class InstanizerClient : IDisposable
 
     public Task<JsonElement> BalanceAsync() => CallAsync(new() { ["action"] = "balance" });
 
-    /// <summary>Buat pesanan. Kirim idempotencyKey agar pengulangan tidak menagih dua kali.</summary>
+    /// <summary>Place an order. Pass idempotencyKey so a retry is not billed twice.</summary>
     public Task<JsonElement> AddAsync(int service, string link, int quantity, string? idempotencyKey = null)
     {
         var p = new Dictionary<string, string>

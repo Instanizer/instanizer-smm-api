@@ -1,10 +1,10 @@
-"""Klien kecil API reseller Instanizer. Tanpa dependensi, Python 3.8+.
+"""Minimal Instanizer reseller API client. No dependencies, Python 3.8+.
 
-    export INSTANIZER_API_KEY=API_KEY_ANDA
+    export INSTANIZER_API_KEY=YOUR_API_KEY
     python instanizer.py
 
-Contoh ini hanya membaca (saldo, layanan, dan status bila INSTANIZER_ORDER_ID diisi).
-Untuk membuat pesanan, panggil api.add(...) seperti contoh di bagian bawah berkas.
+This example is read-only (balance, services, and order status when INSTANIZER_ORDER_ID is set).
+To place an order, call api.add(...) as shown at the bottom of this file.
 """
 import json
 import os
@@ -16,7 +16,7 @@ API_URL = os.environ.get("INSTANIZER_API_URL", "https://api.instanizer.com/api/v
 
 
 class InstanizerError(Exception):
-    """Galat dari API. API membalas HTTP 200 dengan {"error": "..."}."""
+    """Error returned by the API. The API replies HTTP 200 with {"error": "..."}."""
 
 
 class Instanizer:
@@ -27,7 +27,7 @@ class Instanizer:
 
     def _call(self, **params):
         params = {k: v for k, v in params.items() if v is not None}
-        params["key"] = self.key  # key hanya di body, bukan di query string
+        params["key"] = self.key  # key goes in the body only, never in the query string
         data = urllib.parse.urlencode(params).encode()
         req = urllib.request.Request(self.url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -43,7 +43,7 @@ class Instanizer:
         return self._call(action="balance")
 
     def add(self, service, link=None, quantity=None, idempotency_key=None, **extra):
-        """Buat pesanan. Kirim idempotency_key agar pengulangan tidak menagih dua kali."""
+        """Place an order. Pass idempotency_key so a retry is not billed twice."""
         return self._call(
             action="add",
             service=service,
@@ -72,22 +72,22 @@ class Instanizer:
 def main():
     key = os.environ.get("INSTANIZER_API_KEY")
     if not key:
-        sys.exit("Isi INSTANIZER_API_KEY terlebih dahulu.")
+        sys.exit("Set INSTANIZER_API_KEY first.")
     api = Instanizer(key)
 
-    print("Saldo:", api.balance())
+    print("Balance:", api.balance())
     services = api.services()
-    print(f"{len(services)} layanan. Tiga pertama:")
+    print(f"{len(services)} services. First three:")
     for s in services[:3]:
         print(f"  #{s['service']} {s['name']} - Rp {s['rate']}/1000 (min {s['min']}, max {s['max']})")
 
     order_id = os.environ.get("INSTANIZER_ORDER_ID")
     if order_id:
-        print("Status pesanan:", api.status(order_id))
+        print("Order status:", api.status(order_id))
 
-    # Membuat pesanan (memotong saldo). Contoh:
+    # Place an order (deducts balance). Example:
     # result = api.add(service=1, link="https://instagram.com/username",
-    #                  quantity=1000, idempotency_key="pesanan-0001")
+    #                  quantity=1000, idempotency_key="order-0001")
     # print("Order ID:", result["order"])
 
 
@@ -95,4 +95,4 @@ if __name__ == "__main__":
     try:
         main()
     except InstanizerError as e:
-        sys.exit(f"Gagal: {e}")
+        sys.exit(f"Failed: {e}")

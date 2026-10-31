@@ -1,34 +1,34 @@
 #!/usr/bin/env bash
-# Contoh cURL untuk API reseller Instanizer.
+# cURL examples for the Instanizer reseller API.
 #
-#   export INSTANIZER_API_KEY=API_KEY_ANDA
+#   export INSTANIZER_API_KEY=YOUR_API_KEY
 #   bash examples.sh
 #
-# Hanya aksi baca yang dijalankan. Perintah add/refill/cancel ada di bagian bawah
-# sebagai komentar karena memotong atau mengembalikan saldo.
+# Only read actions are run. The add/refill/cancel commands are at the bottom
+# as comments because they deduct or refund balance.
 #
-# Catatan: galat dibalas HTTP 200 dengan {"error": "..."}, jadi periksa isi respons.
-# Selalu kirim key di body (-d), jangan di query string.
+# Note: errors are returned as HTTP 200 with {"error": "..."}, so check the response body.
+# Always send the key in the body (-d), never in the query string.
 
 set -euo pipefail
 
-: "${INSTANIZER_API_KEY:?Isi INSTANIZER_API_KEY terlebih dahulu}"
+: "${INSTANIZER_API_KEY:?Set INSTANIZER_API_KEY first}"
 API_URL="${INSTANIZER_API_URL:-https://api.instanizer.com/api/v2}"
 
-echo "# Saldo"
+echo "# Balance"
 curl -sS -X POST "$API_URL" \
   -d "key=$INSTANIZER_API_KEY" \
   -d action=balance
 echo
 
-echo "# Daftar layanan (potongan 300 karakter pertama)"
+echo "# Service list (first 300 characters)"
 curl -sS -X POST "$API_URL" \
   -d "key=$INSTANIZER_API_KEY" \
   -d action=services | head -c 300
 echo
 
 if [ -n "${INSTANIZER_ORDER_ID:-}" ]; then
-  echo "# Status satu pesanan"
+  echo "# Status of one order"
   curl -sS -X POST "$API_URL" \
     -d "key=$INSTANIZER_API_KEY" \
     -d action=status \
@@ -36,22 +36,22 @@ if [ -n "${INSTANIZER_ORDER_ID:-}" ]; then
   echo
 fi
 
-# --- Aksi yang mengubah saldo/pesanan (hapus tanda # untuk mencoba) ---
+# --- Actions that change balance/orders (remove the leading # to try) ---
 #
-# Buat pesanan (idempotency_key mencegah tagihan ganda bila diulang):
+# Place an order (idempotency_key prevents double billing on retry):
 # curl -sS -X POST "$API_URL" \
 #   -d "key=$INSTANIZER_API_KEY" -d action=add -d service=1 \
 #   --data-urlencode "link=https://instagram.com/username" \
-#   -d quantity=1000 -d idempotency_key=pesanan-0001
+#   -d quantity=1000 -d idempotency_key=order-0001
 #
-# Status beberapa pesanan (maks. 100 ID):
+# Status of several orders (max. 100 IDs):
 # curl -sS -X POST "$API_URL" -d "key=$INSTANIZER_API_KEY" -d action=status -d orders=23501,23502
 #
 # Refill:
 # curl -sS -X POST "$API_URL" -d "key=$INSTANIZER_API_KEY" -d action=refill -d order=23501
 #
-# Status refill:
+# Refill status:
 # curl -sS -X POST "$API_URL" -d "key=$INSTANIZER_API_KEY" -d action=refill_status -d refill=23501
 #
-# Batalkan:
+# Cancel:
 # curl -sS -X POST "$API_URL" -d "key=$INSTANIZER_API_KEY" -d action=cancel -d orders=23501

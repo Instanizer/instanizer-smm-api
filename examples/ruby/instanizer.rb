@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-# Klien kecil API reseller Instanizer. Ruby 3.0+, hanya pustaka standar.
+# Minimal Instanizer reseller API client. Ruby 3.0+, standard library only.
 #
-#   export INSTANIZER_API_KEY=API_KEY_ANDA
+#   export INSTANIZER_API_KEY=YOUR_API_KEY
 #   ruby instanizer.rb
 #
-# Contoh ini hanya membaca (saldo, layanan, dan status bila INSTANIZER_ORDER_ID diisi).
-# Untuk membuat pesanan, panggil api.add(...) seperti contoh di bagian bawah berkas.
+# This example is read-only (balance, services, and order status when INSTANIZER_ORDER_ID is set).
+# To place an order, call api.add(...) as shown at the bottom of this file.
 
 require 'json'
 require 'net/http'
@@ -26,7 +26,7 @@ class Instanizer
 
   def balance = call(action: 'balance')
 
-  # Buat pesanan. Kirim idempotency_key agar pengulangan tidak menagih dua kali.
+  # Place an order. Pass idempotency_key so a retry is not billed twice.
   def add(service:, link: nil, quantity: nil, idempotency_key: nil, **extra)
     call(action: 'add', service: service, link: link, quantity: quantity,
          idempotency_key: idempotency_key, **extra)
@@ -46,7 +46,7 @@ class Instanizer
 
   def call(params)
     form = params.compact.transform_values(&:to_s)
-    form['key'] = @key # key hanya di body, bukan di query string
+    form['key'] = @key # key goes in the body only, never in the query string
 
     begin
       response = Net::HTTP.start(@uri.host, @uri.port, use_ssl: @uri.scheme == 'https',
@@ -54,15 +54,15 @@ class Instanizer
         http.request(Net::HTTP::Post.new(@uri).tap { |req| req.set_form_data(form) })
       end
     rescue SocketError, SystemCallError, IOError, Timeout::Error => e
-      raise Error, "Koneksi gagal: #{e.message}"
+      raise Error, "Connection failed: #{e.message}"
     end
 
     begin
       data = JSON.parse(response.body.to_s)
     rescue JSON::ParserError
-      raise Error, 'Respons bukan JSON yang valid.'
+      raise Error, 'Response is not valid JSON.'
     end
-    # API membalas HTTP 200 untuk galat: periksa field "error".
+    # The API replies HTTP 200 for errors: check the "error" field.
     raise Error, data['error'] if data.is_a?(Hash) && data['error'].is_a?(String)
 
     data
@@ -71,25 +71,25 @@ end
 
 if $PROGRAM_NAME == __FILE__
   key = ENV['INSTANIZER_API_KEY']
-  abort 'Isi INSTANIZER_API_KEY terlebih dahulu.' if key.nil? || key.empty?
+  abort 'Set INSTANIZER_API_KEY first.' if key.nil? || key.empty?
 
   api = Instanizer.new(key)
   begin
-    puts "Saldo: #{api.balance}"
+    puts "Balance: #{api.balance}"
     services = api.services
-    puts "#{services.length} layanan. Tiga pertama:"
+    puts "#{services.length} services. First three:"
     services.first(3).each do |s|
       puts "  ##{s['service']} #{s['name']} - Rp #{s['rate']}/1000 (min #{s['min']}, max #{s['max']})"
     end
 
     order_id = ENV['INSTANIZER_ORDER_ID']
-    puts "Status pesanan: #{api.status(order_id)}" if order_id && !order_id.empty?
+    puts "Order status: #{api.status(order_id)}" if order_id && !order_id.empty?
 
-    # Membuat pesanan (memotong saldo). Contoh:
+    # Place an order (deducts balance). Example:
     # result = api.add(service: 1, link: 'https://instagram.com/username',
-    #                  quantity: 1000, idempotency_key: 'pesanan-0001')
+    #                  quantity: 1000, idempotency_key: 'order-0001')
     # puts "Order ID: #{result['order']}"
   rescue Instanizer::Error => e
-    abort "Gagal: #{e.message}"
+    abort "Failed: #{e.message}"
   end
 end

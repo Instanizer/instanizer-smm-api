@@ -11,17 +11,17 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Klien kecil API reseller Instanizer. Java 17+, tanpa dependensi.
+ * Minimal Instanizer reseller API client. Java 17+, no dependencies.
  *
  * <pre>
- *   export INSTANIZER_API_KEY=API_KEY_ANDA
+ *   export INSTANIZER_API_KEY=YOUR_API_KEY
  *   java Instanizer.java
  * </pre>
  *
- * Java tidak punya parser JSON bawaan, jadi metode mengembalikan JSON mentah (String).
- * Gunakan Jackson, Gson, atau org.json untuk mengurainya di aplikasi Anda.
+ * Java has no built-in JSON parser, so the methods return raw JSON (String).
+ * Use Jackson, Gson, or org.json to parse it in your application.
  *
- * Contoh ini hanya membaca (saldo, layanan, dan status bila INSTANIZER_ORDER_ID diisi).
+ * This example is read-only (balance, services, and order status when INSTANIZER_ORDER_ID is set).
  */
 public class Instanizer {
     private static final String DEFAULT_URL = "https://api.instanizer.com/api/v2";
@@ -40,10 +40,10 @@ public class Instanizer {
         this.url = url;
     }
 
-    /** Kirim aksi ke API dan kembalikan JSON mentah. Melempar IOException bila API membalas {"error": ...}. */
+    /** Send an action to the API and return the raw JSON. Throws IOException if the API replies {"error": ...}. */
     public String call(Map<String, String> params) throws IOException, InterruptedException {
         Map<String, String> all = new LinkedHashMap<>(params);
-        all.put("key", key); // key hanya di body, bukan di query string
+        all.put("key", key); // key goes in the body only, never in the query string
         String form = all.entrySet().stream()
                 .map(e -> enc(e.getKey()) + "=" + enc(e.getValue()))
                 .collect(Collectors.joining("&"));
@@ -55,9 +55,9 @@ public class Instanizer {
                 .build();
         String body = http.send(request, HttpResponse.BodyHandlers.ofString()).body();
 
-        // API membalas HTTP 200 untuk galat: periksa objek {"error": "..."}.
+        // The API replies HTTP 200 for errors: check for an {"error": "..."} object.
         if (body.stripLeading().startsWith("{\"error\"")) {
-            throw new IOException("Galat API: " + body);
+            throw new IOException("API error: " + body);
         }
         return body;
     }
@@ -74,7 +74,7 @@ public class Instanizer {
         return call(Map.of("action", "balance"));
     }
 
-    /** Buat pesanan. Kirim idempotencyKey agar pengulangan tidak menagih dua kali. */
+    /** Place an order. Pass idempotencyKey so a retry is not billed twice. */
     public String add(int service, String link, int quantity, String idempotencyKey)
             throws IOException, InterruptedException {
         Map<String, String> p = new LinkedHashMap<>();
@@ -109,22 +109,22 @@ public class Instanizer {
     public static void main(String[] args) throws Exception {
         String key = System.getenv("INSTANIZER_API_KEY");
         if (key == null || key.isBlank()) {
-            System.err.println("Isi INSTANIZER_API_KEY terlebih dahulu.");
+            System.err.println("Set INSTANIZER_API_KEY first.");
             System.exit(1);
         }
         Instanizer api = new Instanizer(key);
 
-        System.out.println("Saldo: " + api.balance());
+        System.out.println("Balance: " + api.balance());
         String services = api.services();
-        System.out.println("Layanan (potongan): " + services.substring(0, Math.min(300, services.length())) + "...");
+        System.out.println("Services (excerpt): " + services.substring(0, Math.min(300, services.length())) + "...");
 
         String orderId = System.getenv("INSTANIZER_ORDER_ID");
         if (orderId != null && !orderId.isBlank()) {
-            System.out.println("Status pesanan: " + api.status(orderId));
+            System.out.println("Order status: " + api.status(orderId));
         }
 
-        // Membuat pesanan (memotong saldo). Contoh:
-        // String result = api.add(1, "https://instagram.com/username", 1000, "pesanan-0001");
+        // Place an order (deducts balance). Example:
+        // String result = api.add(1, "https://instagram.com/username", 1000, "order-0001");
         // System.out.println(result); // {"order":23501}
     }
 }

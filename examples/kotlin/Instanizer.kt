@@ -9,16 +9,16 @@ import java.time.Duration
 import kotlin.system.exitProcess
 
 /**
- * Klien kecil API reseller Instanizer. Kotlin (JVM) dengan Java 17+, tanpa dependensi.
+ * Minimal Instanizer reseller API client. Kotlin (JVM) with Java 17+, no dependencies.
  *
- *   export INSTANIZER_API_KEY=API_KEY_ANDA
+ *   export INSTANIZER_API_KEY=YOUR_API_KEY
  *   kotlinc Instanizer.kt -include-runtime -d instanizer.jar
  *   java -jar instanizer.jar
  *
- * Metode mengembalikan JSON mentah (String). Gunakan kotlinx.serialization, Moshi,
- * atau Jackson untuk mengurainya di aplikasi Anda.
+ * The methods return raw JSON (String). Use kotlinx.serialization, Moshi,
+ * or Jackson to parse it in your application.
  *
- * Contoh ini hanya membaca (saldo, layanan, dan status bila INSTANIZER_ORDER_ID diisi).
+ * This example is read-only (balance, services, and order status when INSTANIZER_ORDER_ID is set).
  */
 class Instanizer(
     private val key: String,
@@ -26,9 +26,9 @@ class Instanizer(
 ) {
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
-    /** Kirim aksi ke API dan kembalikan JSON mentah. Melempar IOException bila API membalas {"error": ...}. */
+    /** Send an action to the API and return the raw JSON. Throws IOException if the API replies {"error": ...}. */
     fun call(params: Map<String, String>): String {
-        // key hanya di body, bukan di query string
+        // key goes in the body only, never in the query string
         val form = (params + ("key" to key)).entries.joinToString("&") { (k, v) -> "${enc(k)}=${enc(v)}" }
         val request = HttpRequest.newBuilder(URI.create(url))
             .timeout(Duration.ofSeconds(60))
@@ -37,8 +37,8 @@ class Instanizer(
             .build()
         val body = http.send(request, HttpResponse.BodyHandlers.ofString()).body()
 
-        // API membalas HTTP 200 untuk galat: periksa objek {"error": "..."}.
-        if (body.trimStart().startsWith("{\"error\"")) throw IOException("Galat API: $body")
+        // The API replies HTTP 200 for errors: check for an {"error": "..."} object.
+        if (body.trimStart().startsWith("{\"error\"")) throw IOException("API error: $body")
         return body
     }
 
@@ -48,7 +48,7 @@ class Instanizer(
 
     fun balance(): String = call(mapOf("action" to "balance"))
 
-    /** Buat pesanan. Kirim idempotencyKey agar pengulangan tidak menagih dua kali. */
+    /** Place an order. Pass idempotencyKey so a retry is not billed twice. */
     fun add(service: Int, link: String, quantity: Int, idempotencyKey: String? = null): String {
         val params = mutableMapOf(
             "action" to "add",
@@ -62,7 +62,7 @@ class Instanizer(
 
     fun status(order: String): String = call(mapOf("action" to "status", "order" to order))
 
-    /** orders: ID dipisah koma, maksimal 100, mis. "23501,23502". */
+    /** orders: comma-separated IDs, at most 100, e.g. "23501,23502". */
     fun multiStatus(orders: String): String = call(mapOf("action" to "status", "orders" to orders))
 
     fun refill(order: String): String = call(mapOf("action" to "refill", "order" to order))
@@ -75,23 +75,23 @@ class Instanizer(
 fun main() {
     val key = System.getenv("INSTANIZER_API_KEY")
     if (key.isNullOrBlank()) {
-        System.err.println("Isi INSTANIZER_API_KEY terlebih dahulu.")
+        System.err.println("Set INSTANIZER_API_KEY first.")
         exitProcess(1)
     }
     val api = Instanizer(key)
 
     try {
-        println("Saldo: ${api.balance()}")
+        println("Balance: ${api.balance()}")
         val services = api.services()
-        println("Layanan (potongan): ${services.take(300)}...")
+        println("Services (excerpt): ${services.take(300)}...")
 
         val orderId = System.getenv("INSTANIZER_ORDER_ID")
-        if (!orderId.isNullOrBlank()) println("Status pesanan: ${api.status(orderId)}")
+        if (!orderId.isNullOrBlank()) println("Order status: ${api.status(orderId)}")
 
-        // Membuat pesanan (memotong saldo). Contoh:
-        // println(api.add(1, "https://instagram.com/username", 1000, "pesanan-0001")) // {"order":23501}
+        // Place an order (deducts balance). Example:
+        // println(api.add(1, "https://instagram.com/username", 1000, "order-0001")) // {"order":23501}
     } catch (e: IOException) {
-        System.err.println("Gagal: ${e.message}")
+        System.err.println("Failed: ${e.message}")
         exitProcess(1)
     }
 }
